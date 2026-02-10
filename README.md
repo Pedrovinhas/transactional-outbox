@@ -1,12 +1,12 @@
-### Transactional Outbox Pattern
+## Transactional Outbox Pattern
 
 Implementation of the **Transactional Outbox Pattern** with PHP, PostgreSQL, and RabbitMQ to ensure eventual consistency in distributed architectures.
 
 This pattern solves the **dual-write** problem: it ensures events are published reliably even when failures occur, by using an outbox table as a transactional log.
 
-## Architecture
+### Architecture
 
-![Diagram](./diagr1a2m.jpg)
+![Diagram](./diagram.jpg)
 
 ### Services
 
