@@ -1,0 +1,24 @@
+@baseUrl = http://localhost:8080
+
+### Health Check
+GET {{baseUrl}}/
+
+### Create Order
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "customer_name": "John Doe",
+  "customer_email": "john.doe@example.com",
+  "total_amount": 199.99
+}
+
+### List All Orders
+GET {{baseUrl}}/orders
+
+### Get Specific Order
+GET {{baseUrl}}/orders/1
+
+
+### Get Non-Existent Order
+GET {{baseUrl}}/orders/999

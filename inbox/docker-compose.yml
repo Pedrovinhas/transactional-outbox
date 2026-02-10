@@ -1,0 +1,78 @@
+services:
+  inbox-postgres:
+    image: postgres:15-alpine
+    container_name: inbox-postgres
+    environment:
+      POSTGRES_DB: inbox_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - inbox_pgdata:/var/lib/postgresql/data
+      - ./inbox_schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    networks:
+      - inbox-network
+
+  post-processing:
+    build:
+      context: ./post-processing-service
+      dockerfile: Dockerfile
+    container_name: post-processing
+    environment:
+      DB_HOST: inbox-postgres
+      DB_NAME: inbox_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+      OTEL_PHP_AUTOLOAD_ENABLED: "true"
+      OTEL_SERVICE_NAME: post-processing-service
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_PROPAGATORS: tracecontext,baggage
+    depends_on:
+      - inbox-postgres
+    networks:
+      - inbox-network
+      - shared-network
+    restart: unless-stopped
+
+  inbox-relay:
+    build:
+      context: ./relay-service
+      dockerfile: Dockerfile
+    container_name: inbox-relay
+    environment:
+      DB_HOST: inbox-postgres
+      DB_NAME: inbox_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      POLL_INTERVAL: 10
+      OTEL_PHP_AUTOLOAD_ENABLED: "true"
+      OTEL_SERVICE_NAME: inbox-relay-service
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_PROPAGATORS: tracecontext,baggage
+    depends_on:
+      - inbox-postgres
+    networks:
+      - inbox-network
+      - shared-network
+    restart: unless-stopped
+
+volumes:
+  inbox_pgdata:
+
+networks:
+  inbox-network:
+    driver: bridge
+  shared-network:
+    name: transactional-outbox-network
+    external: true

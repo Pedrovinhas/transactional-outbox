@@ -34,7 +34,7 @@ Outbox Relay → [Exchange: orders_exchange]
                [Queue: inbox_queue] → Post-Processing
 ```
 
-## Quick Start
+### Quick Start
 
 ```bash
 # Install dependencies
@@ -69,7 +69,7 @@ inbox/
 └── docker-compose.yml
 ```
 
-## Useful commands
+### Useful commands
 
 ```bash
 make help              # List all commands
@@ -81,7 +81,7 @@ make rebuild           # Rebuild containers
 make clean             # Remove everything
 ```
 
-## Testing
+### Testing
 Use the `requests.http` file in VS Code (REST Client extension) or:
 
 ```bash

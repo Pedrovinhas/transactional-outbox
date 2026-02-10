@@ -1,0 +1,116 @@
+services:
+  orders-postgres:
+    image: postgres:15-alpine
+    container_name: orders-postgres
+    environment:
+      POSTGRES_DB: orders_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - orders_pgdata:/var/lib/postgresql/data
+      - ./orders_schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    networks:
+      - outbox-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - outbox-network
+      - shared-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  orders-service:
+    build:
+      context: ./orders-service
+      dockerfile: Dockerfile
+    container_name: orders-service
+    ports:
+      - "8080:80"
+    environment:
+      DB_HOST: orders-postgres
+      DB_NAME: orders_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      OTEL_PHP_AUTOLOAD_ENABLED: "true"
+      OTEL_SERVICE_NAME: orders-service
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_PROPAGATORS: tracecontext,baggage
+    depends_on:
+      - orders-postgres
+    volumes:
+      - ./orders-service:/var/www/html
+    networks:
+      - outbox-network
+
+  outbox-relay:
+    build:
+      context: ./relay-service
+      dockerfile: Dockerfile
+    container_name: outbox-relay
+    environment:
+      DB_HOST: orders-postgres
+      DB_NAME: orders_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+      POLL_INTERVAL: 10
+      OTEL_PHP_AUTOLOAD_ENABLED: "true"
+      OTEL_SERVICE_NAME: outbox-relay-service
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_PROPAGATORS: tracecontext,baggage
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      orders-postgres:
+        condition: service_started
+    networks:
+      - outbox-network
+    restart: unless-stopped
+
+  jaeger:
+    image: cr.jaegertracing.io/jaegertracing/jaeger:2.15.0
+    container_name: jaeger
+    ports:
+      - "16686:16686"     # Jaeger UI
+      - "4317:4317"       # OTLP gRPC
+      - "4318:4318"       # OTLP HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - outbox-network
+      - shared-network
+
+volumes:
+  orders_pgdata:
+  rabbitmq_data:
+
+networks:
+  outbox-network:
+    driver: bridge
+  shared-network:
+    name: transactional-outbox-network
+    driver: bridge
