@@ -61,34 +61,7 @@ class OutboxRelay
             $pollSpan->setAttribute('events.count', count($events));
             
             foreach ($events as $event) {
-                $traceContext = $event['trace_context'] ?? '';
-                $parentContext = TraceContextHelper::extractParentContext($traceContext);
-                
-                $spanBuilder = $tracer->spanBuilder('outbox.publish_event')
-                    ->setAttribute('event.id', $event['id'])
-                    ->setAttribute('event.type', $event['event_type']);
-                
-                if ($parentContext !== null) {
-                    $spanBuilder->setParent($parentContext);
-                }
-                
-                $eventSpan = $spanBuilder->startSpan();
-                
-                $propagatedContext = TraceContextHelper::serializeFromSpan($eventSpan);
-                
-                try {
-                    $this->publisher->publish($event, $propagatedContext);
-                    
-                    $this->repository->markAsPublished($event['id']);
-                    
-                    $this->logger->info("Published event {$event['id']} - {$event['event_type']}");
-                    
-                } catch (\Exception $e) {
-                    $eventSpan->recordException($e);
-                    $this->logger->error("Failed to publish event {$event['id']}: " . $e->getMessage());
-                } finally {
-                    $eventSpan->end();
-                }
+                $this->publishEvent($tracer, $event);
             }
             
         } catch (\Exception $e) {
@@ -96,6 +69,38 @@ class OutboxRelay
             throw $e;
         } finally {
             $pollSpan->end();
+        }
+    }
+    
+    private function publishEvent($tracer, array $event): void
+    {
+        $traceContext = $event['trace_context'] ?? '';
+        $parentContext = TraceContextHelper::extractParentContext($traceContext);
+        
+        $spanBuilder = $tracer->spanBuilder('outbox.publish_event')
+            ->setAttribute('event.id', $event['id'])
+            ->setAttribute('event.type', $event['event_type']);
+        
+        if ($parentContext !== null) {
+            $spanBuilder->setParent($parentContext);
+        }
+        
+        $eventSpan = $spanBuilder->startSpan();
+        
+        $propagatedContext = TraceContextHelper::serializeFromSpan($eventSpan);
+        
+        try {
+            $this->publisher->publish($event, $propagatedContext);
+            
+            $this->repository->markAsPublished($event['id']);
+            
+            $this->logger->info("Published event {$event['id']} - {$event['event_type']}");
+            
+        } catch (\Exception $e) {
+            $eventSpan->recordException($e);
+            $this->logger->error("Failed to publish event {$event['id']}: " . $e->getMessage());
+        } finally {
+            $eventSpan->end();
         }
     }
     
